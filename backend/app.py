@@ -1,6 +1,6 @@
 import math
 import uuid
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 from db import users_col, tasks_col, transactions_col
 
@@ -9,7 +9,7 @@ CORS(app)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "<h1>Tassel Server is Online! 🚀</h1><p>If you see this, the server is working perfectly.</p>"
+    return render_template('index.html')
 
 @app.route('/api/status/<user_id>', methods=['GET'])
 def get_status(user_id):
