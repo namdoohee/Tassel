@@ -1,0 +1,24 @@
+# macOS
+frontend/Tassel/.DS_Store
+
+# Xcode
+frontend/Tassel/build/
+frontend/Tassel/DerivedData/
+frontend/Tassel/*.xcuserstate
+frontend/Tassel/*.xcscmblueprint
+frontend/Tassel/*.xccheckout
+frontend/Tassel/*.moved-aside
+frontend/Tassel/xcuserdata/
+frontend/Tassel/*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+frontend/Tassel/.swiftpm/
+frontend/Tassel/Package.resolved
+
+# Xcode project artifacts
+frontend/Tassel/*.xcodeproj/project.xcworkspace/xcuserdata/
+frontend/Tassel/*.xcodeproj/xcuserdata/
+
+# Temporary files
+frontend/Tassel/*.swp
+frontend/Tassel/*.tmp
