@@ -11,7 +11,7 @@ CORS(app)
 def home():
     return jsonify({"message": "Tassel MongoDB Backend is running! 🚀"})
 
-@app.route('/api/status/<int:user_id>', methods=['GET'])
+@app.route('/api/status/<user_id>', methods=['GET'])
 def get_status(user_id):
     user = users_col.find_one({"user_id": user_id}, {"_id": 0})
     if not user:
