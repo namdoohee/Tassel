@@ -9,7 +9,7 @@ CORS(app)
 
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({"message": "Tassel MongoDB Backend is running! 🚀"})
+    return "<h1>Tassel Server is Online! 🚀</h1><p>If you see this, the server is working perfectly.</p>"
 
 @app.route('/api/status/<user_id>', methods=['GET'])
 def get_status(user_id):
