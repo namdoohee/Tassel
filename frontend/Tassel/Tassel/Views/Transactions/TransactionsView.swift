@@ -16,7 +16,7 @@ struct TransactionsView: View {
     @State private var isUploading = false
     @State private var isRequestingRoundedAmount = false
     @State private var uploadResponseText: String?
-    @State private var roundedAmountResponseText: String?
+    @State private var roundedAmountStatusMessage: String?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -29,32 +29,18 @@ struct TransactionsView: View {
                 if isUploading {
                     loadingCard(
                         title: "Uploading screenshot",
-                        subtitle: "Sending the selected file to localhost:3000/upload_transactions."
+                        subtitle: "Sending the selected file to be parsed for the rounded amount."
                     )
                 }
 
-                if let uploadResponseText {
-                    responseCard(
-                        title: "Upload Response",
-                        subtitle: "The server response returned from the upload request.",
-                        body: uploadResponseText
-                    )
-                }
+                uploadResponseCard
 
                 roundedAmountCard
 
                 if isRequestingRoundedAmount {
                     loadingCard(
                         title: "Requesting rounded amount",
-                        subtitle: "Posting the upload response to localhost:3000/request."
-                    )
-                }
-
-                if let roundedAmountResponseText {
-                    responseCard(
-                        title: "Rounded Amount Response",
-                        subtitle: "The result returned by the second request.",
-                        body: roundedAmountResponseText
+                        subtitle: "If it looks all correct, send the amount into your profile!"
                     )
                 }
 
@@ -213,7 +199,7 @@ struct TransactionsView: View {
                 .font(.headline)
                 .foregroundColor(TasselPalette.text)
 
-            Text("Send the response from the upload endpoint to the second API call.")
+            Text("If it all looks correct, request the rounded amount!")
                 .font(.caption)
                 .foregroundColor(TasselPalette.text.opacity(0.65))
 
@@ -241,11 +227,76 @@ struct TransactionsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
             .disabled(uploadResponseText == nil || isUploading || isRequestingRoundedAmount)
+
+            if let roundedAmountStatusMessage {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(Color.green.opacity(0.9))
+
+                    Text(roundedAmountStatusMessage)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(Color.green.opacity(0.95))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(12)
+                .background(Color.green.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
         }
         .padding(20)
         .background(TasselPalette.background.opacity(0.95))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: Color.black.opacity(0.06), radius: 16, x: 0, y: 8)
+    }
+
+    @ViewBuilder
+    private var uploadResponseCard: some View {
+        if let uploadResponseText {
+            if let fields = parsedUploadResponseFields(from: uploadResponseText) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Upload Response")
+                                .font(.headline)
+                                .foregroundColor(TasselPalette.text)
+
+                            Text("Parsed values from your statement upload.")
+                                .font(.caption)
+                                .foregroundColor(TasselPalette.text.opacity(0.65))
+                        }
+
+                        Spacer()
+
+                        Circle()
+                            .fill(TasselPalette.accentGold.opacity(0.18))
+                            .frame(width: 12, height: 12)
+                    }
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(fields.enumerated()), id: \.element.id) { index, field in
+                            uploadFieldRow(field)
+
+                            if index < fields.count - 1 {
+                                Divider()
+                                    .background(TasselPalette.accentGold.opacity(0.22))
+                            }
+                        }
+                    }
+                    .background(TasselPalette.accentGold.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .padding(20)
+                .background(TasselPalette.background.opacity(0.95))
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .shadow(color: Color.black.opacity(0.06), radius: 16, x: 0, y: 8)
+            } else {
+                responseCard(
+                    title: "Upload Response",
+                    subtitle: "What you uploaded - and what should be rounded up",
+                    body: prettifiedUploadResponseText(from: uploadResponseText)
+                )
+            }
+        }
     }
 
     private func loadingCard(title: String, subtitle: String) -> some View {
@@ -349,7 +400,7 @@ struct TransactionsView: View {
                     selectedImageData = imageData
                     selectedImageName = "purchase-statement.png"
                     uploadResponseText = nil
-                    roundedAmountResponseText = nil
+                    roundedAmountStatusMessage = nil
                     errorMessage = nil
                 }
             } else {
@@ -375,7 +426,7 @@ struct TransactionsView: View {
         await MainActor.run {
             isUploading = true
             errorMessage = nil
-            roundedAmountResponseText = nil
+            roundedAmountStatusMessage = nil
         }
 
         defer {
@@ -388,16 +439,15 @@ struct TransactionsView: View {
             let (body, contentType) = makeMultipartBody(
                 fileData: selectedImageData,
                 fileName: selectedImageName,
-                fieldName: "file",
+                fieldName: "image",
                 mimeType: "image/png"
             )
 
-            var request = URLRequest(url: endpointURL(path: "/upload_transactions"))
-            request.httpMethod = "POST"
+            var request = TaskAPI.request(path: "/upload_transactions", method: "POST")
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")
 
             let (responseData, response) = try await URLSession.shared.upload(for: request, from: body)
-            try validate(response: response)
+            try TaskAPI.validate(response: response)
 
             let responseText = String(data: responseData, encoding: .utf8) ?? "Upload completed successfully."
 
@@ -422,6 +472,7 @@ struct TransactionsView: View {
         await MainActor.run {
             isRequestingRoundedAmount = true
             errorMessage = nil
+            roundedAmountStatusMessage = nil
         }
 
         defer {
@@ -431,18 +482,22 @@ struct TransactionsView: View {
         }
 
         do {
-            var request = URLRequest(url: endpointURL(path: "/request"))
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(RoundedAmountRequestPayload(response: uploadResponseText))
+            let requestBody = try makeRoundedAmountRequestBody(from: uploadResponseText)
+
+            let request = TaskAPI.request(
+                path: "/request",
+                method: "POST",
+                contentType: "application/json",
+                body: requestBody
+            )
 
             let (responseData, response) = try await URLSession.shared.data(for: request)
-            try validate(response: response)
+            try TaskAPI.validate(response: response)
 
-            let responseText = String(data: responseData, encoding: .utf8) ?? "Rounded amount request completed successfully."
+            let successMessage = try roundedAmountSuccessMessage(from: responseData)
 
             await MainActor.run {
-                roundedAmountResponseText = responseText
+                roundedAmountStatusMessage = successMessage
             }
         } catch {
             await MainActor.run {
@@ -451,22 +506,118 @@ struct TransactionsView: View {
         }
     }
 
-    private func endpointURL(path: String) -> URL {
-        guard let url = URL(string: "http://localhost:3000\(path)") else {
-            fatalError("Invalid local endpoint URL")
+    private func roundedAmountSuccessMessage(from responseData: Data) throws -> String? {
+        let jsonObject = try JSONSerialization.jsonObject(with: responseData)
+
+        guard let payload = jsonObject as? [String: Any] else {
+            return nil
         }
 
-        return url
+        let successValue = payload["success"]
+        let isSuccess: Bool
+
+        if let successBool = successValue as? Bool {
+            isSuccess = successBool
+        } else if let successNumber = successValue as? NSNumber {
+            isSuccess = successNumber.boolValue
+        } else {
+            isSuccess = false
+        }
+
+        guard isSuccess else {
+            return nil
+        }
+
+        if let message = payload["message"] as? String, !message.isEmpty {
+            return message
+        }
+
+        return "Rounded amount request completed successfully."
     }
 
-    private func validate(response: URLResponse) throws {
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+    private func parsedUploadResponseFields(from responseText: String) -> [UploadResponseField]? {
+        guard
+            let responseData = responseText.data(using: .utf8),
+            let jsonObject = try? JSONSerialization.jsonObject(with: responseData),
+            let payload = jsonObject as? [String: Any]
+        else {
+            return nil
         }
 
-        guard (200...299).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
+        return payload
+            .map { key, value in
+                UploadResponseField(key: key, value: jsonValueDisplayString(value))
+            }
+            .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+    }
+
+    private func prettifiedUploadResponseText(from responseText: String) -> String {
+        guard
+            let responseData = responseText.data(using: .utf8),
+            let jsonObject = try? JSONSerialization.jsonObject(with: responseData),
+            let prettyData = try? JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted])
+        else {
+            return responseText
         }
+
+        return String(data: prettyData, encoding: .utf8) ?? responseText
+    }
+
+    private func jsonValueDisplayString(_ value: Any) -> String {
+        if value is NSNull {
+            return "null"
+        }
+
+        if let stringValue = value as? String {
+            return stringValue
+        }
+
+        if let numberValue = value as? NSNumber {
+            return numberValue.stringValue
+        }
+
+        if let boolValue = value as? Bool {
+            return boolValue ? "true" : "false"
+        }
+
+        if JSONSerialization.isValidJSONObject(value),
+           let valueData = try? JSONSerialization.data(withJSONObject: value, options: []),
+           let valueText = String(data: valueData, encoding: .utf8) {
+            return valueText
+        }
+
+        return String(describing: value)
+    }
+
+    private func uploadFieldRow(_ field: UploadResponseField) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(field.key)
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundColor(TasselPalette.text.opacity(0.6))
+
+            Text(field.value)
+                .font(.subheadline)
+                .foregroundColor(TasselPalette.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+    }
+
+    private func makeRoundedAmountRequestBody(from responseText: String) throws -> Data {
+        guard let responseData = responseText.data(using: .utf8) else {
+            throw RoundedAmountRequestBodyError.invalidEncoding
+        }
+
+        let jsonObject = try JSONSerialization.jsonObject(with: responseData)
+
+        guard JSONSerialization.isValidJSONObject(jsonObject) else {
+            throw RoundedAmountRequestBodyError.invalidJSON
+        }
+
+        return try JSONSerialization.data(withJSONObject: jsonObject)
     }
 
     private func makeMultipartBody(fileData: Data, fileName: String, fieldName: String, mimeType: String) -> (body: Data, contentType: String) {
@@ -483,8 +634,18 @@ struct TransactionsView: View {
     }
 }
 
-private struct RoundedAmountRequestPayload: Encodable {
-    let response: String
+private enum RoundedAmountRequestBodyError: LocalizedError {
+    case invalidEncoding
+    case invalidJSON
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidEncoding:
+            return "Unable to encode upload response text as UTF-8."
+        case .invalidJSON:
+            return "Upload response is not a valid JSON object or array."
+        }
+    }
 }
 
 private extension Data {
@@ -493,6 +654,12 @@ private extension Data {
             append(data)
         }
     }
+}
+
+private struct UploadResponseField: Identifiable {
+    let id = UUID()
+    let key: String
+    let value: String
 }
 
 #Preview {

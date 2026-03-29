@@ -186,7 +186,7 @@ struct TransactionHistoryView: View {
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            try validate(response: response)
+            try TaskAPI.validate(response: response)
 
             let items = try JSONDecoder().decode([TransactionHistoryItem].self, from: data)
 
@@ -201,38 +201,47 @@ struct TransactionHistoryView: View {
     }
 
     private var request: URLRequest {
-        URLRequest(url: endpointURL(path: "/transaction_history"))
-    }
-
-    private func endpointURL(path: String) -> URL {
-        guard let url = URL(string: "http://localhost:3000\(path)") else {
-            fatalError("Invalid local endpoint URL")
-        }
-
-        return url
-    }
-
-    private func validate(response: URLResponse) throws {
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-
-        guard (200...299).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
+        TaskAPI.request(path: "/transaction_history")
     }
 }
 
 private struct TransactionHistoryItem: Decodable, Identifiable {
-    let id = UUID()
+    let id: String
+    let transactionID: Int?
     let totalAmount: Double
+    let roundedAmount: Double?
     let rounded: Bool
     let sent: Bool
 
     enum CodingKeys: String, CodingKey {
+        case transactionID = "transaction_id"
         case totalAmount = "total_amount"
+        case roundedAmount = "rounded_amount"
         case rounded
+        case paid
         case sent
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        transactionID = try container.decodeIfPresent(Int.self, forKey: .transactionID)
+        totalAmount = try container.decode(Double.self, forKey: .totalAmount)
+        roundedAmount = try container.decodeIfPresent(Double.self, forKey: .roundedAmount)
+
+        if let rounded = try container.decodeIfPresent(Bool.self, forKey: .rounded) {
+            self.rounded = rounded
+        } else {
+            self.rounded = (roundedAmount ?? 0) > 0
+        }
+
+        if let sent = try container.decodeIfPresent(Bool.self, forKey: .sent) {
+            self.sent = sent
+        } else {
+            self.sent = try container.decodeIfPresent(Bool.self, forKey: .paid) ?? false
+        }
+
+        id = transactionID.map(String.init) ?? UUID().uuidString
     }
 }
 
@@ -266,6 +275,12 @@ private struct TransactionHistoryRow: View {
             HStack(spacing: 10) {
                 statusPill(title: "Rounded", isEnabled: item.rounded)
                 statusPill(title: "Sent", isEnabled: item.sent)
+            }
+
+            if let roundedAmount = item.roundedAmount {
+                Text("Rounded Amount: \(roundedAmount, format: .currency(code: "USD"))")
+                    .font(.caption.weight(.medium))
+                    .foregroundColor(TasselPalette.text.opacity(0.72))
             }
         }
         .padding(20)

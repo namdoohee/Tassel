@@ -285,10 +285,12 @@ struct CreateTaskView: View {
                     : nil
             )
 
-            var request = URLRequest(url: TaskAPI.endpointURL(path: "/create_task"))
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(payload)
+            let request = TaskAPI.request(
+                path: "/create_task",
+                method: "POST",
+                contentType: "application/json",
+                body: try JSONEncoder().encode(payload)
+            )
 
             let (data, response) = try await URLSession.shared.data(for: request)
             try TaskAPI.validate(response: response)

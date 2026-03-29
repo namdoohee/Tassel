@@ -11,6 +11,7 @@ import SwiftUI
 struct StatusView: View {
     @State private var payments: [PaymentRecord] = []
     @State private var isLoading = false
+    @State private var loanAmountText: String?
     @State private var errorMessage: String?
 
     private var paymentSummaries: [PaymentSummary] {
@@ -34,6 +35,22 @@ struct StatusView: View {
 
     private var totalAmount: Double {
         payments.reduce(0) { $0 + $1.amountPerPayment }
+    }
+
+    private var formattedLoanAmount: String {
+        guard let loanAmountText else {
+            return "Loading..."
+        }
+
+        let trimmedValue = loanAmountText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let filteredCharacters = trimmedValue.filter { "0123456789.-,".contains($0) }
+        let normalizedValue = filteredCharacters.replacingOccurrences(of: ",", with: "")
+
+        if let loanValue = Double(normalizedValue) {
+            return loanValue.formatted(.currency(code: "USD"))
+        }
+
+        return trimmedValue.isEmpty ? "Unknown" : trimmedValue
     }
 
     private var earliestPaymentDate: Date? {
@@ -97,7 +114,7 @@ struct StatusView: View {
                 .font(.largeTitle.bold())
                 .foregroundColor(TasselPalette.text)
 
-            Text("Review every payment returned by localhost:3000/status, then compare the mix and totals in a pie chart.")
+            Text("Review every payment up to this point by type")
                 .font(.subheadline)
                 .foregroundColor(TasselPalette.text.opacity(0.72))
                 .fixedSize(horizontal: false, vertical: true)
@@ -146,7 +163,7 @@ struct StatusView: View {
         HStack(spacing: 12) {
             statusMetric(title: "Total", value: totalAmount.formatted(.currency(code: "USD")), icon: "dollarsign.circle.fill")
             statusMetric(title: "Payments", value: "\(payments.count)", icon: "list.bullet.rectangle.fill")
-            statusMetric(title: "Types", value: "\(paymentSummaries.count)", icon: "chart.pie.fill")
+            statusMetric(title: "Total Loan Amount", value: formattedLoanAmount, icon: "graduationcap.circle.fill")
         }
     }
 
@@ -422,13 +439,19 @@ struct StatusView: View {
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: URLRequest(url: StatusAPI.endpointURL(path: "/status")))
-            try StatusAPI.validate(response: response)
+            async let statusResponse = URLSession.shared.data(for: TaskAPI.request(path: "/status"))
+            async let loanResponse = URLSession.shared.data(for: TaskAPI.request(path: "/loan"))
 
-            let items = try JSONDecoder().decode([PaymentRecord].self, from: data)
+            let ((statusData, statusURLResponse), (loanData, loanURLResponse)) = try await (statusResponse, loanResponse)
+            try TaskAPI.validate(response: statusURLResponse)
+            try TaskAPI.validate(response: loanURLResponse)
+
+            let items = try JSONDecoder().decode([PaymentRecord].self, from: statusData)
+            let loanValue = String(data: loanData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
 
             await MainActor.run {
                 payments = items
+                loanAmountText = loanValue
             }
         } catch {
             await MainActor.run {
@@ -442,26 +465,6 @@ struct StatusView: View {
 #Preview {
     NavigationStack {
         StatusView()
-    }
-}
-
-private enum StatusAPI {
-    static func endpointURL(path: String) -> URL {
-        guard let url = URL(string: "http://localhost:3000\(path)") else {
-            fatalError("Invalid local endpoint URL")
-        }
-
-        return url
-    }
-
-    static func validate(response: URLResponse) throws {
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-
-        guard (200...299).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
     }
 }
 

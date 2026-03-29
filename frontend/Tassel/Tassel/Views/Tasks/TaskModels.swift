@@ -8,12 +8,46 @@
 import SwiftUI
 
 enum TaskAPI {
+    static let userIDDefaultsKey = "tassel.userID"
+
     static func endpointURL(path: String) -> URL {
         guard let url = URL(string: "http://localhost:3000\(path)") else {
             fatalError("Invalid local endpoint URL")
         }
 
         return url
+    }
+
+    static func saveUserID(_ userID: String) {
+        let trimmedUserID = userID.trimmingCharacters(in: .whitespacesAndNewlines)
+        UserDefaults.standard.set(trimmedUserID, forKey: userIDDefaultsKey)
+    }
+
+    static func currentUserID() -> String? {
+        let storedValue = UserDefaults.standard.string(forKey: userIDDefaultsKey) ?? "temp"
+        let trimmedValue = storedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedValue.isEmpty ? nil : trimmedValue
+    }
+
+    static func request(
+        path: String,
+        method: String = "GET",
+        contentType: String? = nil,
+        body: Data? = nil
+    ) -> URLRequest {
+        var request = URLRequest(url: endpointURL(path: path))
+        request.httpMethod = method
+
+        if let contentType {
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        }
+
+        if let userID = currentUserID() {
+            request.setValue(userID, forHTTPHeaderField: "user-id")
+        }
+
+        request.httpBody = body
+        return request
     }
 
     static func validate(response: URLResponse) throws {

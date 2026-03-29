@@ -414,7 +414,7 @@ struct TasksView: View {
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: URLRequest(url: TaskAPI.endpointURL(path: "/history_task")))
+            let (data, response) = try await URLSession.shared.data(for: TaskAPI.request(path: "/history_task"))
             try TaskAPI.validate(response: response)
 
             let items = try decodeHistoryItems(from: data)
@@ -446,10 +446,12 @@ struct TasksView: View {
         }
 
         do {
-            var request = URLRequest(url: TaskAPI.endpointURL(path: "/close_task"))
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(CloseTaskPayload(task: task, result: result))
+            let request = TaskAPI.request(
+                path: "/close_task",
+                method: "POST",
+                contentType: "application/json",
+                body: try JSONEncoder().encode(CloseTaskPayload(task: task, result: result))
+            )
 
             let (_, response) = try await URLSession.shared.data(for: request)
             try TaskAPI.validate(response: response)
