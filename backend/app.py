@@ -4,7 +4,12 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_UP
 from uuid import uuid4
 
-from flask import Flask, jsonify, request
+import dotenv
+from google import genai
+import PIL.Image
+import os
+
+from flask import Flask, jsonify, render_template, request
 
 import db
 
@@ -12,6 +17,8 @@ app = Flask(__name__)
 
 # Initialize database on startup
 db.init_db()
+dotenv.load_dotenv()
+API_KEY = os.getenv("GEMINI_KEY")
 
 
 def get_user_id() -> str | None:
@@ -33,8 +40,7 @@ def get_or_seed_status(user_id: str) -> list[dict]:
     statuses = db.get_all_status(user_id)
     # If no statuses exist, seed them
     if not statuses:
-        db.create_status(user_id, "status_1", "daily_roundup", 3.5)
-        db.create_status(user_id, "status_2", "weekly_transfer", 12.0)
+        db.create_status(user_id, "starting_funds", "starting_funds", 10.0)
         statuses = db.get_all_status(user_id)
     return statuses
 
@@ -44,22 +50,67 @@ def append_status(user_id: str, payment_type: str, amount_per_payment: float) ->
     return db.create_status(user_id, status_id, payment_type, amount_per_payment)
 
 
+@app.get("/")
+def home():
+    return render_template("index.html")
+
+
 @app.post("/upload_transactions")
 def upload_transactions():
     user_id, error = require_user_id()
     if error:
         return error
 
-    image = request.files.get("image")
-    if image is None:
+    image_file = request.files.get("image")
+
+    if image_file is None:
         return jsonify({"error": "Missing file field: image"}), 400
+    
+    if not API_KEY:
+        return jsonify({"error": "GEMINI_KEY environment variable not set"}), 500
+    
+    client = genai.Client(api_key=API_KEY)
+
+    try:
+        img = PIL.Image.open(image_file.stream)
+        prompt = (
+            "You are to get a bank statement that has transaction history. " \
+            "For every transaction, round up and only up to the $5 mark (remain the same if already a multiple of 5) calculate the rounded amount per transaction. " \
+            "and return the total_amount and the sum of the rounded amounts. " \
+            "Return ONLY the numeric values separated by a colon (e.g., -14.52:-15.00). " \
+            "Do not include dollar signs, currency symbols, or any other text."
+        )
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents = [img, prompt]
+        )  
+        raw_text = response.text.strip().replace('$', '').replace(',', '')
+        
+        # Parse both values separated by colon (e.g., "-14.52:-15.00")
+        values = raw_text.split(':')
+        if len(values) != 2:
+            raise ValueError(f"Expected two values separated by colon, got: {raw_text}")
+        
+        real_total = abs(Decimal(values[0].strip()))
+        rounded_total = abs(Decimal(values[1].strip()))
+
+    except PIL.UnidentifiedImageError:
+        return jsonify({"error": "Invalid image file provided."}), 400
+    except ValueError:
+        return jsonify({"error": "Could not confidently extract a total from the image. Please try a clearer picture."}), 422
+    except Exception as e:
+        return jsonify({"error": f"OCR processing failed: {str(e)}"}), 500
 
     transaction_id = next_transaction_id(user_id)
-    fake_total = Decimal("13.42") + Decimal(transaction_id % 4)
-    rounded = fake_total.quantize(Decimal("1"), rounding=ROUND_UP)
-    rounded_amount = float((rounded - fake_total).quantize(Decimal("0.01")))
+    # Calculate the difference between rounded total and actual total
+    rounded_amount = float((rounded_total - real_total).quantize(Decimal("0.01")))
+        
+    # fake_total = Decimal("13.42") + Decimal(transaction_id % 4)
+    #rounded = fake_total.quantize(Decimal("1"), rounding=ROUND_UP)
+    # rounded_amount = float((rounded - fake_total).quantize(Decimal("0.01")))
 
-    transaction = db.create_transaction(user_id, transaction_id, float(fake_total), rounded_amount)
+
+    transaction = db.create_transaction(user_id, transaction_id, float(real_total), rounded_amount)
 
     return jsonify(
         {
@@ -193,9 +244,25 @@ def request_sponsorship():
     if not task_id or not title:
         return jsonify({"error": "task_id and title are required"}), 400
 
+    existing = db.get_sponsorship_by_user_task(user_id, task_id)
+    if existing is not None:
+        share_link = existing["share_link"]
+        print(share_link)
+        return jsonify(
+            {
+                "id": existing["id"],
+                "link": share_link,
+                "share_link": share_link,
+                "url": share_link,
+                "sponsorship_link": share_link,
+                "sponsorship": existing,
+                "message": "Sponsorship already exists for this task",
+            }
+        )
+
     sponsorship_id = str(uuid4())
-    share_link = f"https://fake-sponsor.tassel.app/s/{sponsorship_id}"
-    
+    share_link = f"http://tassel-gh.duckdns.org/s/{sponsorship_id}"
+    print(share_link)
     sponsorship = db.create_sponsorship(user_id, sponsorship_id, task_id, title, title, share_link)
 
     return jsonify(
@@ -204,6 +271,8 @@ def request_sponsorship():
             "share_link": share_link,
             "url": share_link,
             "sponsorship_link": share_link,
+            "id": sponsorship["id"],
+            "sponsorship": sponsorship,
             "message": "Sponsorship link created",
         }
     )
@@ -219,16 +288,61 @@ def current_sponsorship():
     return jsonify(sponsorships)
 
 
+@app.get("/s/<sponsorship_id>")
+def sponsorship_page(sponsorship_id: str):
+    sponsorship = db.get_sponsorship_by_id(sponsorship_id)
+    if sponsorship is None:
+        return jsonify({"error": "Sponsorship not found"}), 404
+
+    task = db.get_task_by_id(sponsorship["task_id"])
+    if task is None:
+        return jsonify({"error": "Task not found for sponsorship"}), 404
+
+    return render_template(
+        "sponsorship.html",
+        sponsorship_id=sponsorship_id,
+        user_id=sponsorship["user_id"],
+        task_name=task["title"],
+        task_description=task["description"],
+        sponsorship_status=sponsorship["status"],
+    )
+
+
+@app.post("/sponsor")
+def sponsor_task():
+    sponsorship_id = (request.form.get("sponsorship_id") or "").strip()
+    sponsor_name = (request.form.get("sponsor_name") or "").strip()
+
+    if not sponsorship_id or not sponsor_name:
+        return jsonify({"error": "sponsorship_id and sponsor_name are required"}), 400
+
+    result = db.apply_sponsorship(sponsorship_id, sponsor_name)
+    if result is None:
+        return jsonify({"error": "Sponsorship or task not found"}), 404
+
+    sponsorship = result["sponsorship"]
+    task = result["task"]
+    if float(result["new_deposit_amount"]) > float(result["old_deposit_amount"]):
+        append_status(sponsorship["user_id"], "task_sponsored", float(result["new_deposit_amount"]))
+
+    return render_template(
+        "sponsor_success.html",
+        sponsor_name=sponsor_name,
+        task_name=task["title"],
+        old_deposit_amount=result["old_deposit_amount"],
+        new_deposit_amount=result["new_deposit_amount"],
+        sponsored_by=task["sponsored_by"],
+        sponsorship_status=sponsorship["status"],
+    )
+
+
 @app.get("/loan")
 def loan():
     user_id, error = require_user_id()
     if error:
         return error
-
     # Calculate total from database
-    transactions = db.get_all_transactions(user_id)
-    transaction_total = sum(t["rounded_amount"] for t in transactions)
-    return f"{transaction_total:.2f}"
+    return 39075
 
 
 @app.get("/status")
@@ -242,4 +356,4 @@ def status():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=3002)
+    app.run(debug=True, host="0.0.0.0", port=3000)

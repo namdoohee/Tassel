@@ -41,11 +41,13 @@ body {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
   padding: clamp(28px, 5vw, 56px);
+  text-align: center;
 }
 
 .hero__brand {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 24px;
 }
 
@@ -87,6 +89,63 @@ body {
   white-space: nowrap;
 }
 
+.sponsor-card {
+  max-width: 760px;
+}
+
+.sponsor-card__title {
+  margin: 0 0 20px;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  letter-spacing: -0.03em;
+}
+
+.sponsor-card__meta {
+  margin: 0 0 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.sponsor-form {
+  margin-top: 24px;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.sponsor-form__label {
+  font-size: 0.95rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sponsor-form__input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+}
+
+.sponsor-form__button {
+  width: fit-content;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  justify-self: center;
+}
+
+.sponsor-form__button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 @media (max-width: 640px) {
   .page-shell {
     padding: 20px;
@@ -98,7 +157,7 @@ body {
 
   .hero__brand {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 20px;
   }
 
@@ -112,5 +171,6 @@ body {
 
   .hero__tagline {
     font-size: 1rem;
+    white-space: normal;
   }
 }

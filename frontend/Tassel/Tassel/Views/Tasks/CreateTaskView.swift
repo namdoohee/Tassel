@@ -47,7 +47,7 @@ struct CreateTaskView: View {
                 .font(.largeTitle.bold())
                 .foregroundColor(TasselPalette.text)
 
-            Text("POST the task details to localhost:3000/create_task and make it the new active task.")
+            Text("Create and set a new active task.")
                 .font(.subheadline)
                 .foregroundColor(TasselPalette.text.opacity(0.72))
                 .fixedSize(horizontal: false, vertical: true)

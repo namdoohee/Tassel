@@ -66,12 +66,7 @@ struct StatusView: View {
             return nil
         }
 
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-
-        return formatter.string(from: earliestPaymentDate) + " to " + formatter.string(from: latestPaymentDate)
+        return TasselDateFormatting.displayString(from: earliestPaymentDate) + " to " + TasselDateFormatting.displayString(from: latestPaymentDate)
     }
 
     var body: some View {
@@ -89,7 +84,7 @@ struct StatusView: View {
                 if let errorMessage {
                     responseCard(
                         title: "Status Error",
-                        subtitle: "Unable to load payments from localhost:3000/status.",
+                        subtitle: "Unable to load payments.",
                         body: errorMessage,
                         accent: TasselPalette.danger
                     )
@@ -252,7 +247,7 @@ struct StatusView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(TasselPalette.text)
 
-                Text("Fetching the latest payment records from localhost:3000/status.")
+                Text("Fetching the latest payment records.")
                     .font(.caption)
                     .foregroundColor(TasselPalette.text.opacity(0.65))
             }
@@ -276,7 +271,7 @@ struct StatusView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundColor(TasselPalette.text)
 
-            Text("When localhost:3000/status returns payments, the list and chart will populate here.")
+            Text("When payments are available, the list and chart will populate here.")
                 .font(.caption)
                 .multilineTextAlignment(.center)
                 .foregroundColor(TasselPalette.text.opacity(0.6))
@@ -482,10 +477,10 @@ private struct PaymentRecord: Decodable, Identifiable {
 
     var formattedDate: String {
         if let parsedDate {
-            return parsedDate.formatted(date: .abbreviated, time: .shortened)
+            return TasselDateFormatting.displayString(from: parsedDate)
         }
 
-        return rawDateTime ?? "Unknown date"
+        return TasselDateFormatting.displayString(from: rawDateTime) ?? "Unknown date"
     }
 
     var color: Color {
@@ -501,7 +496,7 @@ private struct PaymentRecord: Decodable, Identifiable {
 
         let dateTimeString = try PaymentRecord.decodeString(container, keys: [.dateTime, .dateTimeCamel, .dateTimeSlash, .timestamp, .createdAt])
         rawDateTime = dateTimeString
-        parsedDate = PaymentRecord.parseDate(from: dateTimeString)
+        parsedDate = TasselDateFormatting.parseDate(from: dateTimeString)
     }
 
     private static func decodeString(_ container: KeyedDecodingContainer<CodingKeys>, keys: [CodingKeys]) throws -> String? {
@@ -535,62 +530,6 @@ private struct PaymentRecord: Decodable, Identifiable {
             if let value = try container.decodeIfPresent(String.self, forKey: key), let parsedValue = Double(value) {
                 return parsedValue
             }
-        }
-
-        return nil
-    }
-
-    private static func parseDate(from rawValue: String?) -> Date? {
-        guard let rawValue else { return nil }
-
-        let trimmedValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedValue.isEmpty else { return nil }
-
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = isoFormatter.date(from: trimmedValue) {
-            return date
-        }
-
-        let fallbackIsoFormatter = ISO8601DateFormatter()
-        fallbackIsoFormatter.formatOptions = [.withInternetDateTime]
-        if let date = fallbackIsoFormatter.date(from: trimmedValue) {
-            return date
-        }
-
-        let formatterCandidates: [DateFormatter] = [
-            {
-                let formatter = DateFormatter()
-                formatter.locale = Locale(identifier: "en_US_POSIX")
-                formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-                return formatter
-            }(),
-            {
-                let formatter = DateFormatter()
-                formatter.locale = Locale(identifier: "en_US_POSIX")
-                formatter.dateFormat = "MM/dd/yyyy HH:mm:ss"
-                return formatter
-            }(),
-            {
-                let formatter = DateFormatter()
-                formatter.locale = Locale(identifier: "en_US_POSIX")
-                formatter.dateFormat = "MM/dd/yyyy h:mm a"
-                return formatter
-            }()
-        ]
-
-        for formatter in formatterCandidates {
-            if let date = formatter.date(from: trimmedValue) {
-                return date
-            }
-        }
-
-        if let timestamp = Double(trimmedValue) {
-            if timestamp > 1_000_000_000_000 {
-                return Date(timeIntervalSince1970: timestamp / 1000)
-            }
-
-            return Date(timeIntervalSince1970: timestamp)
         }
 
         return nil

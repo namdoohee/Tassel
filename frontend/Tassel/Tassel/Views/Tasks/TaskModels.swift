@@ -11,7 +11,7 @@ enum TaskAPI {
     static let userIDDefaultsKey = "tassel.userID"
 
     static func endpointURL(path: String) -> URL {
-        guard let url = URL(string: "http://localhost:3000\(path)") else {
+        guard let url = URL(string: "http://tassel-gh.duckdns.org\(path)") else {
             fatalError("Invalid local endpoint URL")
         }
 

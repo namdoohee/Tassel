@@ -102,7 +102,7 @@ struct TransactionHistoryView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(TasselPalette.text)
 
-                Text("Fetching the latest transaction records from localhost:3000/transaction_history.")
+                Text("Fetching the latest transaction records")
                     .font(.caption)
                     .foregroundColor(TasselPalette.text.opacity(0.65))
             }
@@ -206,42 +206,108 @@ struct TransactionHistoryView: View {
 }
 
 private struct TransactionHistoryItem: Decodable, Identifiable {
-    let id: String
+    let id: Int
+    let userID: String?
     let transactionID: Int?
     let totalAmount: Double
     let roundedAmount: Double?
-    let rounded: Bool
-    let sent: Bool
+    let paid: Int
 
     enum CodingKeys: String, CodingKey {
+        case id
+        case userID = "user_id"
         case transactionID = "transaction_id"
         case totalAmount = "total_amount"
         case roundedAmount = "rounded_amount"
-        case rounded
         case paid
-        case sent
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        transactionID = try container.decodeIfPresent(Int.self, forKey: .transactionID)
-        totalAmount = try container.decode(Double.self, forKey: .totalAmount)
-        roundedAmount = try container.decodeIfPresent(Double.self, forKey: .roundedAmount)
-
-        if let rounded = try container.decodeIfPresent(Bool.self, forKey: .rounded) {
-            self.rounded = rounded
-        } else {
-            self.rounded = (roundedAmount ?? 0) > 0
+        guard let decodedID = try TransactionHistoryItem.decodeInt(container, keys: [.id, .transactionID]) else {
+            throw DecodingError.dataCorruptedError(forKey: .id, in: container, debugDescription: "Expected an integer-compatible transaction history id.")
         }
 
-        if let sent = try container.decodeIfPresent(Bool.self, forKey: .sent) {
-            self.sent = sent
-        } else {
-            self.sent = try container.decodeIfPresent(Bool.self, forKey: .paid) ?? false
+        self.id = decodedID
+        self.userID = try TransactionHistoryItem.decodeString(container, keys: [.userID])
+        self.transactionID = try TransactionHistoryItem.decodeInt(container, keys: [.transactionID])
+        self.totalAmount = try TransactionHistoryItem.decodeDouble(container, key: .totalAmount) ?? 0
+        self.roundedAmount = try TransactionHistoryItem.decodeDouble(container, key: .roundedAmount)
+        self.paid = try TransactionHistoryItem.decodeInt(container, keys: [.paid]) ?? 0
+    }
+
+    private static func decodeString(_ container: KeyedDecodingContainer<CodingKeys>, keys: [CodingKeys]) throws -> String? {
+        for key in keys {
+            if let value = try container.decodeIfPresent(String.self, forKey: key), !value.isEmpty {
+                return value
+            }
+
+            if let intValue = try container.decodeIfPresent(Int.self, forKey: key) {
+                return String(intValue)
+            }
+
+            if let doubleValue = try container.decodeIfPresent(Double.self, forKey: key) {
+                return String(doubleValue)
+            }
         }
 
-        id = transactionID.map(String.init) ?? UUID().uuidString
+        return nil
+    }
+
+    private static func decodeInt(_ container: KeyedDecodingContainer<CodingKeys>, keys: [CodingKeys]) throws -> Int? {
+        for key in keys {
+            if let value = try container.decodeIfPresent(Int.self, forKey: key) {
+                return value
+            }
+
+            if let stringValue = try container.decodeIfPresent(String.self, forKey: key), let value = Int(stringValue) {
+                return value
+            }
+        }
+
+        return nil
+    }
+
+    private static func decodeDouble(_ container: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Double? {
+        if let value = try container.decodeIfPresent(Double.self, forKey: key) {
+            return value
+        }
+
+        if let integerValue = try container.decodeIfPresent(Int.self, forKey: key) {
+            return Double(integerValue)
+        }
+
+        if let stringValue = try container.decodeIfPresent(String.self, forKey: key), let value = Double(stringValue) {
+            return value
+        }
+
+        return nil
+    }
+
+    private static func decodeBool(_ container: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Bool? {
+        if let value = try container.decodeIfPresent(Bool.self, forKey: key) {
+            return value
+        }
+
+        if let integerValue = try container.decodeIfPresent(Int.self, forKey: key) {
+            return integerValue != 0
+        }
+
+        if let stringValue = try container.decodeIfPresent(String.self, forKey: key) {
+            let normalized = stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+            switch normalized {
+            case "true", "1", "yes", "paid":
+                return true
+            case "false", "0", "no", "unpaid":
+                return false
+            default:
+                return nil
+            }
+        }
+
+        return nil
     }
 }
 
@@ -263,18 +329,18 @@ private struct TransactionHistoryRow: View {
 
                 Spacer()
 
-                Text(item.sent ? "Sent" : "Pending")
+                Text(item.paid == 1 ? "Paid" : "Pending")
                     .font(.caption.weight(.semibold))
-                    .foregroundColor(item.sent ? TasselPalette.accentBlack : TasselPalette.danger)
+                    .foregroundColor(item.paid == 1 ? TasselPalette.accentBlack : TasselPalette.danger)
                     .padding(.vertical, 6)
                     .padding(.horizontal, 10)
-                    .background((item.sent ? TasselPalette.accentGold : TasselPalette.danger).opacity(0.14))
+                    .background((item.paid == 1 ? TasselPalette.accentGold : TasselPalette.danger).opacity(0.14))
                     .clipShape(Capsule())
             }
 
             HStack(spacing: 10) {
-                statusPill(title: "Rounded", isEnabled: item.rounded)
-                statusPill(title: "Sent", isEnabled: item.sent)
+                statusPill(title: "Rounded", isEnabled: (item.roundedAmount ?? 0) > 0)
+                statusPill(title: "Paid", isEnabled: item.paid == 1)
             }
 
             if let roundedAmount = item.roundedAmount {

@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block title %}Sponsorship Complete{% endblock %}
+
+{% block body %}
+<main class="page-shell">
+  <section class="hero sponsor-card" aria-label="Sponsorship complete">
+    <h1 class="sponsor-card__title">Thank you for sponsoring!</h1>
+    <p class="sponsor-card__meta"><strong>Sponsor:</strong> {{ sponsor_name }}</p>
+    <p class="sponsor-card__meta"><strong>Task:</strong> {{ task_name }}</p>
+    <p class="sponsor-card__meta"><strong>Previous deposit:</strong> {{ '%.2f'|format(old_deposit_amount) }}</p>
+    <p class="sponsor-card__meta"><strong>New deposit:</strong> {{ '%.2f'|format(new_deposit_amount) }}</p>
+    <p class="sponsor-card__meta"><strong>sponsored_by:</strong> {{ sponsored_by }}</p>
+    <p class="sponsor-card__meta"><strong>Sponsorship status:</strong> {{ sponsorship_status }}</p>
+  </section>
+</main>
+{% endblock %}

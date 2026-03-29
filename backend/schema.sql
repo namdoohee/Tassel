@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     description TEXT NOT NULL,
     type TEXT NOT NULL CHECK(type IN ('productivity', 'achievement')),
     deposit_amount REAL NOT NULL,
+    sponsored_by TEXT NOT NULL DEFAULT 'nobody',
     tracked_app_name TEXT,
     status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed')),
     result TEXT CHECK(result IN ('success', 'failure') OR result IS NULL),
@@ -77,9 +78,9 @@ INSERT OR IGNORE INTO transactions (user_id, transaction_id, total_amount, round
 ('demo_user', 3, 8.99, 1.01, 0, '2026-03-28T18:45:00+00:00');
 
 -- Sample tasks
-INSERT OR IGNORE INTO tasks (id, user_id, title, description, type, deposit_amount, tracked_app_name, status, result, created_at, closed_at) VALUES
-('task-001', 'demo_user', 'Morning Run', 'Run for 30 minutes', 'productivity', 5.00, NULL, 'closed', 'success', '2026-03-28T06:00:00+00:00', '2026-03-28T06:35:00+00:00'),
-('task-002', 'demo_user', 'Study Python', 'Study 2 hours of Python', 'achievement', 10.00, 'Python IDE', 'open', NULL, '2026-03-28T19:00:00+00:00', NULL);
+INSERT OR IGNORE INTO tasks (id, user_id, title, description, type, deposit_amount, sponsored_by, tracked_app_name, status, result, created_at, closed_at) VALUES
+('task-001', 'demo_user', 'Morning Run', 'Run for 30 minutes', 'productivity', 5.00, 'nobody', NULL, 'closed', 'success', '2026-03-28T06:00:00+00:00', '2026-03-28T06:35:00+00:00'),
+('task-002', 'demo_user', 'Study Python', 'Study 2 hours of Python', 'achievement', 10.00, 'nobody', 'Python IDE', 'open', NULL, '2026-03-28T19:00:00+00:00', NULL);
 
 -- Sample sponsorships
 INSERT OR IGNORE INTO sponsorships (id, user_id, task_id, title, task_title, status, share_link, created_at) VALUES

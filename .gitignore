@@ -22,3 +22,7 @@ frontend/Tassel/*.xcodeproj/xcuserdata/
 # Temporary files
 frontend/Tassel/*.swp
 frontend/Tassel/*.tmp
+
+
+*venv
+*.env

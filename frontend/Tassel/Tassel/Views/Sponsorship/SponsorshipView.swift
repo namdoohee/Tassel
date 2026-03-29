@@ -13,7 +13,6 @@ struct SponsorshipView: View {
     @State private var isLoadingActiveTask = false
     @State private var isLoadingCurrentSponsorships = false
     @State private var isRequestingSponsorship = false
-    @State private var requestResponseText: String?
     @State private var shareLink: URL?
     @State private var errorMessage: String?
 
@@ -24,18 +23,8 @@ struct SponsorshipView: View {
 
                 activeTaskCard
 
-                requestCard
-
                 if let shareLink {
                     shareLinkCard(shareLink)
-                }
-
-                if let requestResponseText {
-                    responseCard(
-                        title: "Request Response",
-                        subtitle: "Raw response returned from /request_sponsorship.",
-                        body: requestResponseText
-                    )
                 }
 
                 currentSponsorshipsSection
@@ -121,7 +110,6 @@ struct SponsorshipView: View {
                         .foregroundColor(TasselPalette.text.opacity(0.72))
 
                     HStack(spacing: 10) {
-                        statusPill(title: "Task ID", value: activeTask.id, tint: TasselPalette.accentGold)
                         statusPill(title: "Deposit", value: activeTask.depositAmount.formatted(.currency(code: "USD")), tint: TasselPalette.accentBlack)
                     }
 
@@ -186,47 +174,6 @@ struct SponsorshipView: View {
                     accent: TasselPalette.danger
                 )
             }
-        }
-        .padding(20)
-        .background(TasselPalette.background.opacity(0.95))
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: Color.black.opacity(0.06), radius: 16, x: 0, y: 8)
-    }
-
-    private var requestCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Request sponsorship")
-                .font(.headline)
-                .foregroundColor(TasselPalette.text)
-
-            Text("POSTs the current active task id to localhost:3000/request_sponsorship and returns a link you can share.")
-                .font(.caption)
-                .foregroundColor(TasselPalette.text.opacity(0.65))
-
-            Button {
-                Task {
-                    await sendSponsorshipRequest()
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    if isRequestingSponsorship {
-                        ProgressView()
-                            .tint(TasselPalette.background)
-                    } else {
-                        Image(systemName: "paperplane.fill")
-                    }
-
-                    Text(isRequestingSponsorship ? "Sending request..." : "Send Request")
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundColor(TasselPalette.background)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .padding(.horizontal, 20)
-                .background(activeTask == nil || isRequestingSponsorship ? TasselPalette.text.opacity(0.35) : TasselPalette.accentGold)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            }
-            .disabled(activeTask == nil || isRequestingSponsorship)
         }
         .padding(20)
         .background(TasselPalette.background.opacity(0.95))
@@ -370,12 +317,14 @@ struct SponsorshipView: View {
                 Spacer()
 
                 if let status = sponsorship.status {
+                    let statusTint = sponsorshipStatusTint(for: status)
+
                     Text(status)
                         .font(.caption.weight(.semibold))
-                        .foregroundColor(TasselPalette.accentBlack)
+                        .foregroundColor(statusTint)
                         .padding(.vertical, 6)
                         .padding(.horizontal, 10)
-                        .background(TasselPalette.accentGold.opacity(0.14))
+                        .background(statusTint.opacity(0.14))
                         .clipShape(Capsule())
                 }
             }
@@ -387,12 +336,8 @@ struct SponsorshipView: View {
             }
 
             HStack(spacing: 10) {
-                if let taskID = sponsorship.taskID {
-                    statusPill(title: "Task ID", value: taskID, tint: TasselPalette.accentGold)
-                }
-
                 if let createdAt = sponsorship.createdAt {
-                    statusPill(title: "Created", value: createdAt, tint: TasselPalette.accentBlack)
+                    statusPill(title: "Created", value: formattedDateString(createdAt) ?? createdAt, tint: TasselPalette.accentBlack)
                 }
             }
 
@@ -507,6 +452,16 @@ struct SponsorshipView: View {
         .clipShape(Capsule())
     }
 
+    private func formattedDateString(_ rawValue: String) -> String? {
+        TasselDateFormatting.displayString(from: rawValue)
+    }
+
+    private func sponsorshipStatusTint(for status: String) -> Color {
+        status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "sponsored"
+            ? .green
+            : TasselPalette.accentBlack
+    }
+
     private func refreshAll() async {
         await loadActiveTask()
         await loadCurrentSponsorships()
@@ -553,7 +508,6 @@ struct SponsorshipView: View {
         await MainActor.run {
             isRequestingSponsorship = true
             errorMessage = nil
-            requestResponseText = nil
             shareLink = nil
         }
 
@@ -574,11 +528,9 @@ struct SponsorshipView: View {
             let (data, response) = try await URLSession.shared.data(for: request)
             try TaskAPI.validate(response: response)
 
-            let responseText = prettyPrintedResponse(from: data)
             let shareURL = shareLinkURL(from: data)
 
             await MainActor.run {
-                requestResponseText = responseText
                 self.shareLink = shareURL
             }
 
@@ -661,21 +613,6 @@ struct SponsorshipView: View {
 
         let strippedText = rawText.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
         return URL(string: strippedText)
-    }
-
-    private func prettyPrintedResponse(from data: Data) -> String {
-        guard let object = try? JSONSerialization.jsonObject(with: data) else {
-            return String(data: data, encoding: .utf8) ?? "Unable to decode response body."
-        }
-
-        guard JSONSerialization.isValidJSONObject(object),
-              let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
-              let string = String(data: prettyData, encoding: .utf8)
-        else {
-            return String(describing: object)
-        }
-
-        return string
     }
 }
 

@@ -367,7 +367,7 @@ struct TransactionsView: View {
                         .font(.headline)
                         .foregroundColor(TasselPalette.text)
 
-                    Text("Open the recent transaction payloads returned by the server.")
+                    Text("Find what transactions you've made.")
                         .font(.caption)
                         .foregroundColor(TasselPalette.text.opacity(0.65))
                 }

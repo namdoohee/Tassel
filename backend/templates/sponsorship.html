@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}Sponsor a Task{% endblock %}
+
+{% block body %}
+<main class="page-shell">
+  <section class="hero sponsor-card" aria-label="Sponsorship request">
+    <h1 class="sponsor-card__title">Sponsor This Task</h1>
+    <p class="sponsor-card__meta"><strong>User ID:</strong> {{ user_id }}</p>
+    <p class="sponsor-card__meta"><strong>Task:</strong> {{ task_name }}</p>
+    <p class="sponsor-card__meta"><strong>Description:</strong> {{ task_description }}</p>
+    <p class="sponsor-card__meta"><strong>Status:</strong> {{ sponsorship_status }}</p>
+
+    <form method="post" action="{{ url_for('sponsor_task') }}" class="sponsor-form">
+      <input type="hidden" name="sponsorship_id" value="{{ sponsorship_id }}" />
+      <label for="sponsor_name" class="sponsor-form__label">Enter your name to sponsor</label>
+      <input
+        id="sponsor_name"
+        name="sponsor_name"
+        type="text"
+        class="sponsor-form__input"
+        placeholder="Your name"
+        required
+      />
+      <button type="submit" class="sponsor-form__button">Sponsor Task</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

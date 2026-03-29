@@ -160,7 +160,7 @@ struct TasksView: View {
             }
 
             if isClosingTask {
-                loadingRow(title: "Closing task", subtitle: "Posting the result to localhost:3000/close_task.")
+                loadingRow(title: "Closing task", subtitle: "Closing the active task and updating history.")
             }
         }
         .padding(20)
@@ -208,7 +208,7 @@ struct TasksView: View {
         VStack(alignment: .leading, spacing: 16) {
             sectionHeader(
                 title: "Task history",
-                subtitle: "Loaded from localhost:3000/history_task and grouped as recent activity."
+                subtitle: "Loaded all previous task histories."
             )
 
             if isLoadingHistory {
